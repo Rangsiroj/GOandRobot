@@ -23,3 +23,4 @@ except KeyboardInterrupt:
     gnugo.close()
     vision.release()
     print("ปิดโปรแกรมแล้ว")
+    #test
