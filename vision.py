@@ -105,7 +105,7 @@ class VisionSystem:
                 cv2.imshow("กระดานตรง", blank)
 
             if move:
-                print(f"🎯 เจอหมากที่: {move}")
+                print(f"เจอหมากที่: {move}")
 
             if cv2.waitKey(1) & 0xFF == 27:
                 break
