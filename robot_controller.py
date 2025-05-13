@@ -8,4 +8,4 @@ from pymodbus.client.sync import ModbusTcpClient
 #     client.close()
 
 def move_robot(x, y):
-    print(f"[SIMULATION] หุ่นยนต์ควรไปที่: X={x}, Y={y}")
+    print(f"[DEPRECATED] ระบบหุ่นยนต์ไม่ได้ใช้งานอีกต่อไป: X={x}, Y={y}")
