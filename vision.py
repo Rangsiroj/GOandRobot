@@ -8,6 +8,7 @@ class VisionSystem:
         self.cap = cv2.VideoCapture(url)
         self.prev_frame = None
         self.last_warped = None
+        self.last_aruco_corners = None  # เพิ่มสำหรับจำตำแหน่งมุมล่าสุด
         self.board_size = (500, 500)
         self.aruco_dict = aruco.getPredefinedDictionary(aruco.DICT_4X4_50)
         self.parameters = aruco.DetectorParameters()
@@ -23,12 +24,12 @@ class VisionSystem:
             aruco.drawDetectedMarkers(frame, corners, ids)
 
         if ids is None or len(ids) < 4:
-            return None
+            return self.last_aruco_corners  # ใช้ค่าล่าสุดถ้ามี
 
         id_to_point = {int(id[0]): np.mean(corner[0], axis=0) for id, corner in zip(ids, corners)}
         required_ids = [0, 1, 2, 3]
         if not all(i in id_to_point for i in required_ids):
-            return None
+            return self.last_aruco_corners
 
         src_pts = np.float32([
             id_to_point[0],
@@ -43,23 +44,19 @@ class VisionSystem:
         def expand(pt):
             direction = pt - center
             norm = np.linalg.norm(direction)
-            if norm == 0:
-                return pt
-            return pt + padding * direction / norm
+            return pt + padding * direction / norm if norm != 0 else pt
 
         expanded_pts = np.float32([expand(pt) for pt in src_pts])
+        self.last_aruco_corners = expanded_pts  # จำไว้ใช้รอบหน้า
         return expanded_pts
 
     def pixel_to_board_position(self, x, y):
         col = int(x / (self.board_size[0] / 19))
         row = int(y / (self.board_size[1] / 19))
-
-        letters = "ABCDEFGHJKLMNOPQRST"  # ไม่มี I
+        letters = "ABCDEFGHJKLMNOPQRST"
         col = max(0, min(col, 18))
         row = max(0, min(row, 18))
-
-        position = f"{letters[col]}{19 - row}"
-        return position
+        return f"{letters[col]}{19 - row}"
 
     def detect_new_stone(self):
         ret, frame = self.cap.read()
@@ -83,7 +80,11 @@ class VisionSystem:
         warped = cv2.warpPerspective(frame, matrix, self.board_size)
         self.last_warped = warped
 
+        # ปรับแสงอัตโนมัติ
         gray_warped = cv2.cvtColor(warped, cv2.COLOR_BGR2GRAY)
+        clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+        gray_warped = clahe.apply(gray_warped)
+
         blurred = cv2.GaussianBlur(gray_warped, (5, 5), 0)
         circles = cv2.HoughCircles(
             blurred, cv2.HOUGH_GRADIENT, dp=1.2, minDist=20,
@@ -94,26 +95,22 @@ class VisionSystem:
         if self.prev_frame is not None:
             diff = cv2.absdiff(self.prev_frame, gray_warped)
             changed = np.sum(diff > 50)
-
             if changed > 5000 and circles is not None:
                 print("✅ ตรวจพบหมากใหม่")
                 circles = np.uint16(np.around(circles))
                 for i in circles[0, :]:
                     cx, cy = i[0], i[1]
                     move_detected = self.pixel_to_board_position(cx, cy)
-                    break  # ใช้แค่จุดแรกพอ
+                    break
 
         self.prev_frame = gray_warped
         return frame, warped, move_detected
-    
-    def draw_mapping_grid(self, image, mapping): # ตัวสร้างเส้นกระดาน
+
+    def draw_mapping_grid(self, image, mapping):
         for key, (x, y) in mapping.items():
-            # วาดจุด
             cv2.circle(image, (int(x), int(y)), 3, (0, 255, 0), -1)
-
-            # วาด label
-            cv2.putText(image, key, (int(x) + 5, int(y) - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0, 255, 0), 1)
-
+            cv2.putText(image, key, (int(x) + 5, int(y) - 5),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0, 255, 0), 1)
 
     def run(self):
         print("🔁 เริ่มระบบกล้อง กด ESC เพื่อออก")
@@ -123,7 +120,7 @@ class VisionSystem:
             if frame is not None:
                 cv2.imshow("กล้องสด", frame)
             if warped is not None:
-                self.draw_mapping_grid(warped, mapping) #ตัวสร้างเส้นกระดาน
+                self.draw_mapping_grid(warped, mapping)
                 cv2.imshow("กระดานตรง", warped)
             else:
                 blank = np.zeros((self.board_size[1], self.board_size[0], 3), dtype=np.uint8)
@@ -140,3 +137,4 @@ class VisionSystem:
     def release(self):
         self.cap.release()
         cv2.destroyAllWindows()
+        print("🔒 ปิดกล้องเรียบร้อยแล้ว")
