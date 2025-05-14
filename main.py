@@ -1,13 +1,13 @@
 from gnu_interface import GNUGo
 from vision import VisionSystem
-from middleware import generate_mapping, board_to_robot_coords, mapping
+from middleware import generate_mapping, board_to_robot_coords
 import time
 import csv
 import os
 from datetime import datetime
 
 # ใช้ mapping แบบ dynamic (ยังใช้ได้ในอนาคต ถ้าอยากพัฒนาเรื่องพิกัดเพิ่ม)
-mapping = generate_mapping(start_x=90, start_y=85, step=24)
+mapping = generate_mapping(start_x=80, start_y=80, step=30)
 
 # เตรียมระบบบันทึก CSV แบบ 'w' (ลบของเก่า)
 csv_filename = "go_moves.csv"
@@ -16,7 +16,7 @@ with open(csv_filename, mode='w', newline='', encoding='utf-8') as file:
     writer.writerow(["timestamp", "player", "move"])
 
 # เรียกใช้งาน GNU Go และระบบกล้อง
-gnugo = GNUGo()
+gnugo = GNUGo() 
 vision = VisionSystem()
 vision.run()
 
