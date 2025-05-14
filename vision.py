@@ -1,7 +1,6 @@
 import cv2
 import numpy as np
 import cv2.aruco as aruco
-from middleware import mapping  # ตัวสร้างเส้นกระดาน
 
 class VisionSystem:
     def __init__(self, url='http://10.153.244.243:4747/video'):
@@ -11,6 +10,7 @@ class VisionSystem:
         self.board_size = (500, 500)
         self.aruco_dict = aruco.getPredefinedDictionary(aruco.DICT_4X4_50)
         self.parameters = aruco.DetectorParameters()
+        self.mapping = {}  # ✅ จะอัปเดตภายหลัง
 
         if not self.cap.isOpened():
             print("❌ ไม่สามารถเปิดกล้องได้")
@@ -73,6 +73,7 @@ class VisionSystem:
         if aruco_corners is None:
             return frame, self.last_warped, None
 
+        # Perspective warp
         dst_pts = np.float32([
             [0, 0],
             [self.board_size[0], 0],
@@ -83,6 +84,26 @@ class VisionSystem:
         warped = cv2.warpPerspective(frame, matrix, self.board_size)
         self.last_warped = warped
 
+        # ✅ สร้าง mapping grid แล้ว warp ไปตาม matrix
+        letters = "ABCDEFGHJKLMNOPQRST"
+        raw_grid = []
+        label_list = []
+        step = self.board_size[0] / 18
+        for row in range(19):
+            for col in range(19):
+                x = col * step
+                y = row * step
+                raw_grid.append([[x, y]])
+                label_list.append(f"{letters[col]}{19 - row}")
+
+        raw_grid = np.array(raw_grid, dtype=np.float32)
+        warped_points = cv2.perspectiveTransform(raw_grid, matrix)
+
+        self.mapping = {
+            label: tuple(pt[0]) for label, pt in zip(label_list, warped_points)
+        }
+
+        # ตรวจหาเม็ดหมาก
         gray_warped = cv2.cvtColor(warped, cv2.COLOR_BGR2GRAY)
         blurred = cv2.GaussianBlur(gray_warped, (5, 5), 0)
         circles = cv2.HoughCircles(
@@ -101,19 +122,15 @@ class VisionSystem:
                 for i in circles[0, :]:
                     cx, cy = i[0], i[1]
                     move_detected = self.pixel_to_board_position(cx, cy)
-                    break  # ใช้แค่จุดแรกพอ
+                    break
 
         self.prev_frame = gray_warped
         return frame, warped, move_detected
-    
-    def draw_mapping_grid(self, image, mapping): # ตัวสร้างเส้นกระดาน
-        for key, (x, y) in mapping.items():
-            # วาดจุด
-            cv2.circle(image, (int(x), int(y)), 3, (0, 255, 0), -1)
 
-            # วาด label
-            cv2.putText(image, key, (int(x) + 5, int(y) - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0, 255, 0), 1)
-
+    def draw_mapping_grid(self, image):
+        for label, (x, y) in self.mapping.items():
+            cv2.circle(image, (int(x), int(y)), 2, (0, 255, 0), -1)
+            cv2.putText(image, label, (int(x)+2, int(y)-2), cv2.FONT_HERSHEY_PLAIN, 0.5, (0, 255, 0), 1)
 
     def run(self):
         print("🔁 เริ่มระบบกล้อง กด ESC เพื่อออก")
@@ -123,7 +140,8 @@ class VisionSystem:
             if frame is not None:
                 cv2.imshow("กล้องสด", frame)
             if warped is not None:
-                self.draw_mapping_grid(warped, mapping) #ตัวสร้างเส้นกระดาน
+                if self.mapping:
+                    self.draw_mapping_grid(warped)
                 cv2.imshow("กระดานตรง", warped)
             else:
                 blank = np.zeros((self.board_size[1], self.board_size[0], 3), dtype=np.uint8)

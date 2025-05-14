@@ -9,7 +9,7 @@ def generate_mapping(start_x=0, start_y=0, step=1):
             mapping[label] = (x, y)
     return mapping
 
-mapping = {}  # placeholder
+# mapping = {}  # placeholder
 
 def board_to_robot_coords(position):
     return mapping.get(position, (0, 0))
